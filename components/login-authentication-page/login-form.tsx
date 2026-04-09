@@ -11,6 +11,8 @@ import { useAuth } from "@/context/auth-context"
 
 // import AppleLogin from 'react-apple-login';
 
+/** Only this account may sign in to the dashboard login page. */
+const ALLOWED_DASHBOARD_LOGIN_EMAIL = "09munashealvinrukuni@gmail.com";
 
 // Login Form
 export function LoginForm({
@@ -41,6 +43,12 @@ export function LoginForm({
 
         const trimmedEmail = email.trim();
         const trimmedPassword = password.trim();
+
+        if (trimmedEmail.toLowerCase() !== ALLOWED_DASHBOARD_LOGIN_EMAIL.toLowerCase()) {
+            setErrorMessage('Access to this dashboard is restricted to authorized accounts only.');
+            setIsLoading(false);
+            return;
+        }
 
         // @ Email Validation
         if (!trimmedEmail.includes('@gmail.com')) {
@@ -107,13 +115,14 @@ export function LoginForm({
     };
 
 
-    // Email Validation useEffect
+    // Email Validation useEffect (must match allowed dashboard account)
     useEffect(() => {
         if (email === '') {
             setIsEmailValid(null);
             return;
         }
-        setIsEmailValid(email.includes('@gmail.com'));
+        const normalized = email.trim().toLowerCase();
+        setIsEmailValid(normalized === ALLOWED_DASHBOARD_LOGIN_EMAIL.toLowerCase());
     }, [email]);
 
 
