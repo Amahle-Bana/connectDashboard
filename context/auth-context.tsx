@@ -153,18 +153,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     };
                 }
 
-                if (content.otp_required) {
-                    // Credentials are correct and OTP has been sent.
-                    // Do NOT mark the user as authenticated yet.
+                if (content.jwt) {
+                    localStorage.setItem('jwt_token', content.jwt);
                     return {
                         success: true,
-                        message: content.message || 'OTP sent to your email. Please verify to continue.',
-                        otpRequired: true,
-                        email: content.email || trimmedEmail,
+                        message: content.message || 'Login successful.',
+                        otpRequired: false,
                     };
                 }
 
-                // Fallback: unexpected successful response without otp_required
+                // OTP path (disabled) — restore when re-enabling backend OTP login
+                // if (content.otp_required) {
+                //     return {
+                //         success: true,
+                //         message: content.message || 'OTP sent to your email. Please verify to continue.',
+                //         otpRequired: true,
+                //         email: content.email || trimmedEmail,
+                //     };
+                // }
+
                 return {
                     success: false,
                     message: content.error || 'Unexpected login response. Please try again.',
@@ -223,13 +230,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
     };
 
-    // Signup Function  
+    // Signup Function (OTP + verify-signup chain disabled — see OTP_IMPLEMENTATION_RESTORE.md in connectWeb)
     const signup = (username: string, email: string, password: string, fullName?: string) => {
         const signupData: any = { username, email, password };
         if (fullName) {
             signupData.full_name = fullName;
         }
-        
+
         return fetch(`${process.env.NEXT_PUBLIC_SIGNUP || 'http://localhost:8000/somaapp/signup/'}`, {
             method: 'POST',
             headers: {
@@ -239,7 +246,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
             .then(async response => {
                 if (!response.ok) {
-                    // Try to get the error message from the response
                     try {
                         const errorData = await response.json();
                         return {
@@ -255,88 +261,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 return response.json();
             })
-            .then(content => {
-                if (!content.username) {
+            .then((content) => {
+                if (content.jwt) {
+                    localStorage.setItem('jwt_token', content.jwt);
                     return {
-                        success: false,
-                        message: content.error || 'Signup failed. Please try again.'
+                        success: true,
+                        message: content.message || 'Account created successfully.',
+                        email: content.email || email,
                     };
                 }
 
-                // Verify the signup
-                return fetch(`${process.env.NEXT_PUBLIC_VERIFY_SIGNUP || 'http://localhost:8000/somaapp/verify-signup/'}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ email }),
-                })
-                    .then(verifyResponse => {
-                        if (!verifyResponse.ok) {
-                            // If verification fails, attempt to clean up the partial registration
-                            return fetch(`${process.env.NEXT_PUBLIC_CLEANUP_SIGNUP || 'http://localhost:8000/somaapp/cleanup-signup/'}`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({ email }),
-                            })
-                                .then(() => {
-                                    throw new Error('Database registration verification failed');
-                                });
-                        }
-                        return content;
-                    });
-            })
-            .then(() => {
-                // Try to login after successful signup
-                return login(email, password)
-                    .then(loginResult => {
-                        if (!loginResult.success) {
-                            // If login fails, clean up the registration
-                            return fetch(`${process.env.NEXT_PUBLIC_CLEANUP_SIGNUP || 'http://localhost:8000/somaapp/cleanup-signup/'}`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({ email }),
-                            })
-                                .then(() => {
-                                    return {
-                                        success: false,
-                                        message: 'Username Or E-mail Already Exists'
-                                    };
-                                });
-                        }
-                        return loginResult;
-                    })
-                    .catch(() => {
-                        // If login throws an error, clean up the registration
-                        return fetch(`${process.env.NEXT_PUBLIC_CLEANUP_SIGNUP}`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ email }),
-                        })
-                            .then(() => {
-                                throw new Error('Login failed after signup');
-                            });
-                    });
+                return {
+                    success: false,
+                    message: content.error || 'Signup failed. Please try again.',
+                };
             })
             .catch(error => {
                 return {
                     success: false,
-                    message: error.message === 'Database registration verification failed'
-                        ? 'Unable to verify signup status. Please try again.'
-                        : error.message === 'Login failed after signup'
-                            ? 'Signup successful but automatic login failed. Please try logging in manually.'
-                            : 'Network error occurred. Please check your connection and try again.'
+                    message: error.message || 'Network error occurred. Please check your connection and try again.'
                 };
             });
     };
 
-    // Verify OTP Function
+    // Verify OTP Function (disabled — endpoint returns 501; kept for restoration)
     const verifyOTP = (email: string, otpCode: string) => {
         const baseUrl = process.env.NEXT_PUBLIC_VERIFY_OTP || 'http://localhost:8000';
         return fetch(`${baseUrl}/somaapp/verify-otp/`, {
@@ -375,7 +323,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
     };
 
-    // Resend OTP Function
+    // Resend OTP Function (disabled — resend branch returns 400; kept for restoration)
     const resendOTP = (email: string) => {
         const baseUrl = process.env.NEXT_PUBLIC_RESEND_OTP || 'http://localhost:8000';
         return fetch(`${baseUrl}/somaapp/signup/`, {
